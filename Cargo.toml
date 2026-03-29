@@ -3,11 +3,23 @@ name = "sendspin-tui"
 version = "0.1.0"
 edition = "2024"
 
+[lib]
+name = "sendspin_tui"
+path = "src/lib.rs"
+
+[[bin]]
+name = "sendspin-tui"
+path = "src/main.rs"
+
+[[bin]]
+name = "sendspin-daemon"
+path = "src/bin/daemon.rs"
+
 [dependencies]
 sendspin = "0.1.2"
 ratatui = "0.29"
 crossterm = "0.28"
-tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros"] }
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros", "signal"] }
 clap = { version = "4", features = ["derive"] }
 cpal = "0.17"
 parking_lot = "0.12"

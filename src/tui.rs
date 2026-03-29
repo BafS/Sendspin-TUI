@@ -30,8 +30,9 @@ pub fn run(
         }
 
         // Poll for keyboard events with timeout (~20fps)
-        if event::poll(Duration::from_millis(50))? {
-            if let Event::Key(key) = event::read()? {
+        if event::poll(Duration::from_millis(50))?
+            && let Event::Key(key) = event::read()?
+        {
                 // Only handle key press events (not release/repeat)
                 if key.kind != KeyEventKind::Press {
                     continue;
@@ -68,7 +69,6 @@ pub fn run(
                     }
                     _ => {}
                 }
-            }
         }
     }
 

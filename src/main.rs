@@ -7,7 +7,7 @@ mod ui;
 use std::fs::File;
 
 use clap::Parser;
-use cpal::traits::{DeviceTrait, HostTrait};
+use sendspin_tui::shared;
 
 /// Sendspin TUI audio player
 #[derive(Parser)]
@@ -44,15 +44,9 @@ fn main() -> color_eyre::Result<()> {
     let args = Args::parse();
 
     if args.list_audio_devices {
-        list_devices()?;
+        shared::list_devices()?;
         return Ok(());
     }
-
-    // Resolve audio device before entering TUI
-    let device = match &args.audio_device {
-        Some(query) => Some(find_device(query)?),
-        None => None,
-    };
 
     // Create channels
     let (event_tx, event_rx) = tokio::sync::mpsc::unbounded_channel();
@@ -62,8 +56,23 @@ fn main() -> color_eyre::Result<()> {
     let rt = tokio::runtime::Runtime::new()?;
     let server = args.server.clone();
     let name = args.name.clone();
+    let audio_device = args.audio_device.clone();
     rt.spawn(async move {
-        protocol::run_protocol(server, name, device, event_tx, command_rx).await;
+        protocol::run_protocol(server, name, audio_device, event_tx, command_rx).await;
+    });
+
+    // Signal handling: forward SIGINT/SIGTERM as Command::Quit
+    let signal_tx = command_tx.clone();
+    rt.spawn(async move {
+        use tokio::signal::unix::{signal, SignalKind};
+        let mut sigint = signal(SignalKind::interrupt()).expect("failed to install SIGINT handler");
+        let mut sigterm =
+            signal(SignalKind::terminate()).expect("failed to install SIGTERM handler");
+        tokio::select! {
+            _ = sigint.recv() => {}
+            _ = sigterm.recv() => {}
+        }
+        let _ = signal_tx.send(event::Command::Quit);
     });
 
     // Run TUI on main thread (blocks until quit)
@@ -72,65 +81,4 @@ fn main() -> color_eyre::Result<()> {
     ratatui::restore();
 
     result
-}
-
-fn list_devices() -> color_eyre::Result<()> {
-    let mut index = 0u32;
-    for host_id in cpal::available_hosts() {
-        let host = cpal::host_from_id(host_id)?;
-        for device in host.devices()? {
-            let has_output = device
-                .supported_output_configs()
-                .map(|mut c| c.next().is_some())
-                .unwrap_or(false);
-            if !has_output {
-                continue;
-            }
-            let id = device
-                .id()
-                .map_or_else(|_| "unknown".into(), |id| id.to_string());
-            let desc = device
-                .description()
-                .map(|d| format!("{d:?}"))
-                .unwrap_or_else(|_| "no description".into());
-            println!("[{index:>2}] {id}\n     {desc}");
-            index += 1;
-        }
-    }
-    if index == 0 {
-        println!("No output devices found.");
-    }
-    Ok(())
-}
-
-fn find_device(query: &str) -> color_eyre::Result<cpal::Device> {
-    let idx_query = query.parse::<usize>().ok();
-    let mut usable_index = 0usize;
-
-    for host_id in cpal::available_hosts() {
-        let host = cpal::host_from_id(host_id)?;
-        for device in host.devices()? {
-            let has_output = device
-                .supported_output_configs()
-                .map(|mut c| c.next().is_some())
-                .unwrap_or(false);
-            if !has_output {
-                continue;
-            }
-            if let Some(idx) = idx_query {
-                if usable_index == idx {
-                    return Ok(device);
-                }
-            } else {
-                let id = device
-                    .id()
-                    .map_or_else(|_| String::new(), |id| id.to_string());
-                if id == query {
-                    return Ok(device);
-                }
-            }
-            usable_index += 1;
-        }
-    }
-    Err(color_eyre::eyre::eyre!("Audio device '{query}' not found"))
 }

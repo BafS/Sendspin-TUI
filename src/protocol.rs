@@ -1,113 +1,105 @@
 use std::sync::Arc;
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 use log::{error, warn};
 use sendspin::audio::decode::{Decoder, PcmDecoder, PcmEndian};
 use sendspin::audio::{AudioBuffer, AudioFormat, Codec, SyncedPlayer};
-use sendspin::protocol::messages::{
-    AudioFormatSpec, ClientCommand, ClientHello, ClientState, ClientTime, ControllerCommand,
-    DeviceInfo, GoodbyeReason, Message, PlayerCommand, PlayerState, PlayerSyncState,
-    PlayerV1Support,
-};
+use sendspin::protocol::messages::{ClientCommand, ControllerCommand, GoodbyeReason, Message};
 use sendspin::ProtocolClient;
+use sendspin_tui::shared;
 use tokio::sync::mpsc;
 use tokio::time::interval;
 
 use crate::event::{AppEvent, Command};
 
-/// Connect to a Sendspin server and run the protocol loop.
-/// Handles audio decoding, clock sync, and user commands until quit or disconnect.
+enum ExitReason {
+    Quit,
+    Disconnected,
+}
+
+/// Connect to a Sendspin server and run the protocol loop with auto-reconnect.
 pub async fn run_protocol(
     server_url: String,
     client_name: String,
-    audio_device: Option<cpal::Device>,
+    audio_device_query: Option<String>,
     event_tx: mpsc::UnboundedSender<AppEvent>,
     mut command_rx: mpsc::UnboundedReceiver<Command>,
 ) {
-    if let Err(e) = run_inner(server_url, client_name, audio_device, &event_tx, &mut command_rx).await {
-        let _ = event_tx.send(AppEvent::Disconnected(e.to_string()));
+    let mut backoff = shared::Backoff::new();
+
+    loop {
+        // Resolve device fresh each attempt
+        let audio_device = match &audio_device_query {
+            Some(query) => match shared::find_device(query) {
+                Ok(dev) => Some(dev),
+                Err(e) => {
+                    let _ = event_tx.send(AppEvent::Error(format!("Audio device error: {e}")));
+                    None
+                }
+            },
+            None => None,
+        };
+
+        match run_inner(
+            &server_url,
+            &client_name,
+            audio_device,
+            &event_tx,
+            &mut command_rx,
+        )
+        .await
+        {
+            Ok(ExitReason::Quit) => break,
+            Ok(ExitReason::Disconnected) => {
+                backoff.reset();
+                let delay = backoff.next_delay();
+                let _ = event_tx.send(AppEvent::Disconnected(format!(
+                    "Reconnecting in {:.1}s...",
+                    delay.as_secs_f64()
+                )));
+                tokio::time::sleep(delay).await;
+            }
+            Err(e) => {
+                let delay = backoff.next_delay();
+                let _ = event_tx.send(AppEvent::Disconnected(format!(
+                    "{e} — reconnecting in {:.1}s...",
+                    delay.as_secs_f64()
+                )));
+                tokio::time::sleep(delay).await;
+            }
+        }
     }
 }
 
 async fn run_inner(
-    server_url: String,
-    client_name: String,
+    server_url: &str,
+    client_name: &str,
     audio_device: Option<cpal::Device>,
     event_tx: &mpsc::UnboundedSender<AppEvent>,
     command_rx: &mut mpsc::UnboundedReceiver<Command>,
-) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    let client_id = uuid::Uuid::new_v4().to_string();
-
-    let hello = ClientHello {
-        client_id,
-        name: client_name,
-        version: 1,
-        supported_roles: vec![
-            "player@v1".to_string(),
-            "controller@v1".to_string(),
-            "metadata@v1".to_string(),
-        ],
-        device_info: Some(DeviceInfo {
-            product_name: Some("Sendspin TUI".to_string()),
-            manufacturer: Some("Sendspin".to_string()),
-            software_version: Some(env!("CARGO_PKG_VERSION").to_string()),
-        }),
-        player_v1_support: Some(PlayerV1Support {
-            supported_formats: vec![
-                AudioFormatSpec {
-                    codec: "pcm".to_string(),
-                    channels: 2,
-                    sample_rate: 48000,
-                    bit_depth: 24,
-                },
-                AudioFormatSpec {
-                    codec: "pcm".to_string(),
-                    channels: 2,
-                    sample_rate: 48000,
-                    bit_depth: 16,
-                },
-            ],
-            buffer_capacity: 50 * 1024 * 1024,
-            supported_commands: vec!["volume".to_string(), "mute".to_string()],
-        }),
-        artwork_v1_support: None,
-        visualizer_v1_support: None,
-    };
-
-    let client = ProtocolClient::connect(&server_url, hello).await?;
+) -> Result<ExitReason, Box<dyn std::error::Error + Send + Sync>> {
+    let hello = shared::build_hello(client_name, "Sendspin TUI");
+    let client = ProtocolClient::connect(server_url, hello).await?;
     let (mut message_rx, mut audio_rx, clock_sync, ws_tx, _guard) = client.split();
 
     let _ = event_tx.send(AppEvent::Connected);
 
-    // Send initial client state
-    let client_state = Message::ClientState(ClientState {
-        player: Some(PlayerState {
-            state: PlayerSyncState::Synchronized,
-            volume: Some(100),
-            muted: Some(false),
-        }),
-    });
-    ws_tx.send_message(client_state).await?;
+    shared::send_initial_client_state(&ws_tx).await?;
+    shared::send_time_sync(&ws_tx).await?;
 
-    // Send initial clock sync
-    send_time_sync(&ws_tx).await?;
-
-    // Periodic clock sync interval
     let mut sync_interval = interval(Duration::from_secs(5));
 
-    // Audio state
     let mut decoder: Option<PcmDecoder> = None;
     let mut audio_format: Option<AudioFormat> = None;
     let mut synced_player: Option<SyncedPlayer> = None;
 
-    // Controller state tracking (for stateful commands like volume +/-)
     let mut current_volume: u8 = 100;
     let mut current_muted = false;
     let mut current_playing = false;
     let mut current_repeat = sendspin::protocol::messages::RepeatMode::Off;
     let mut current_shuffle = false;
 
-    loop {
+    let exit_reason = loop {
         tokio::select! {
             Some(msg) = message_rx.recv() => {
                 match msg {
@@ -167,10 +159,9 @@ async fn run_inner(
                             let _ = event_tx.send(AppEvent::Controller(controller));
                         }
                     }
-                    // ServerTime is handled internally by the library — never forwarded
                     Message::ServerCommand(cmd) => {
                         if let Some(player_cmd) = cmd.player {
-                            handle_player_command(&player_cmd, &synced_player);
+                            shared::handle_player_command(&player_cmd, &synced_player);
                         }
                     }
                     Message::GroupUpdate(update) => {
@@ -180,7 +171,6 @@ async fn run_inner(
                         });
                     }
                     other => {
-                        // Truncate debug output to avoid flooding
                         let debug = format!("{other:?}");
                         let truncated = if debug.len() > 120 {
                             format!("{}...", &debug[..120])
@@ -195,7 +185,6 @@ async fn run_inner(
                 let Some(ref fmt) = audio_format else { continue };
                 let Some(ref dec) = decoder else { continue };
 
-                // Frame sanity check
                 let bytes_per_sample = fmt.bit_depth as usize / 8;
                 let frame_size = bytes_per_sample * fmt.channels as usize;
                 if chunk.data.len() % frame_size != 0 {
@@ -210,7 +199,6 @@ async fn run_inner(
                     }
                 };
 
-                // Lazy init SyncedPlayer
                 if synced_player.is_none() {
                     match SyncedPlayer::new(
                         fmt.clone(),
@@ -241,7 +229,7 @@ async fn run_inner(
             }
             Some(cmd) = command_rx.recv() => {
                 match cmd {
-                    Command::Quit => break,
+                    Command::Quit => break ExitReason::Quit,
                     cmd => {
                         let result = apply_command(
                             cmd,
@@ -251,7 +239,6 @@ async fn run_inner(
                             &mut current_repeat,
                             &mut current_shuffle,
                         );
-                        // Update TUI with optimistic state
                         let _ = event_tx.send(AppEvent::LocalStateUpdate {
                             volume: current_volume,
                             muted: current_muted,
@@ -259,18 +246,17 @@ async fn run_inner(
                             repeat: current_repeat.clone(),
                             shuffle: current_shuffle,
                         });
-                        if let Some(msg) = result {
-                            if let Err(e) = ws_tx.send_message(msg).await {
-                                error!("Failed to send command: {e}");
-                                break;
-                            }
+                        if let Some(msg) = result
+                            && let Err(e) = ws_tx.send_message(msg).await
+                        {
+                            error!("Failed to send command: {e}");
+                            break ExitReason::Disconnected;
                         }
                     }
                 }
             }
             _ = sync_interval.tick() => {
-                let _ = send_time_sync(&ws_tx).await;
-                // Report clock sync status (ServerTime is handled internally by the library)
+                let _ = shared::send_time_sync(&ws_tx).await;
                 let sync = clock_sync.lock();
                 if let Some(rtt) = sync.rtt_micros() {
                     let _ = event_tx.send(AppEvent::ClockSync {
@@ -279,9 +265,11 @@ async fn run_inner(
                     });
                 }
             }
-            else => break,
+            else => {
+                break ExitReason::Disconnected;
+            }
         }
-    }
+    };
 
     // Graceful shutdown
     let _ = ws_tx
@@ -292,24 +280,7 @@ async fn run_inner(
         ))
         .await;
 
-    Ok(())
-}
-
-fn handle_player_command(cmd: &PlayerCommand, player: &Option<SyncedPlayer>) {
-    let Some(player) = player else { return };
-    match cmd.command.as_str() {
-        "volume" => {
-            if let Some(vol) = cmd.volume {
-                player.set_volume(vol);
-            }
-        }
-        "mute" => {
-            if let Some(muted) = cmd.mute {
-                player.set_mute(muted);
-            }
-        }
-        _ => {}
-    }
+    Ok(exit_reason)
 }
 
 /// Apply a user command: mutate local state optimistically and return the protocol message.
@@ -382,17 +353,4 @@ fn apply_command(
             mute: mute_val,
         }),
     }))
-}
-
-async fn send_time_sync(
-    ws_tx: &sendspin::protocol::client::WsSender,
-) -> Result<(), sendspin::error::Error> {
-    // SystemTime is always after UNIX_EPOCH on any reasonable system
-    let client_transmitted = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("system clock before Unix epoch")
-        .as_micros() as i64;
-    ws_tx
-        .send_message(Message::ClientTime(ClientTime { client_transmitted }))
-        .await
 }
