@@ -64,7 +64,7 @@ fn main() -> color_eyre::Result<()> {
     // Signal handling: forward SIGINT/SIGTERM as Command::Quit
     let signal_tx = command_tx.clone();
     rt.spawn(async move {
-        use tokio::signal::unix::{signal, SignalKind};
+        use tokio::signal::unix::{SignalKind, signal};
         let mut sigint = signal(SignalKind::interrupt()).expect("failed to install SIGINT handler");
         let mut sigterm =
             signal(SignalKind::terminate()).expect("failed to install SIGTERM handler");

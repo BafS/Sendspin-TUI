@@ -6,10 +6,10 @@ use std::time::{Duration, Instant};
 
 use clap::Parser;
 use log::{debug, error, info, warn};
+use sendspin::ProtocolClient;
 use sendspin::audio::decode::{Decoder, PcmDecoder, PcmEndian};
 use sendspin::audio::{AudioBuffer, AudioFormat, Codec, SyncedPlayer};
 use sendspin::protocol::messages::{GoodbyeReason, Message};
-use sendspin::ProtocolClient;
 use sendspin_tui::shared;
 use tokio::sync::watch;
 use tokio::time::interval;
@@ -58,7 +58,7 @@ async fn main() -> color_eyre::Result<()> {
     // Signal handling via watch channel
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
     tokio::spawn(async move {
-        use tokio::signal::unix::{signal, SignalKind};
+        use tokio::signal::unix::{SignalKind, signal};
         let mut sigint = signal(SignalKind::interrupt()).expect("failed to install SIGINT handler");
         let mut sigterm =
             signal(SignalKind::terminate()).expect("failed to install SIGTERM handler");
@@ -84,7 +84,10 @@ async fn main() -> color_eyre::Result<()> {
             Ok(ExitReason::Reconnect) => {
                 backoff.reset();
                 let delay = backoff.next_delay();
-                warn!("Disconnected, reconnecting in {:.1}s...", delay.as_secs_f64());
+                warn!(
+                    "Disconnected, reconnecting in {:.1}s...",
+                    delay.as_secs_f64()
+                );
                 tokio::time::sleep(delay).await;
             }
             Err(e) => {
@@ -104,13 +107,13 @@ async fn connect_and_run(
     mut shutdown_rx: watch::Receiver<bool>,
 ) -> Result<ExitReason, Box<dyn std::error::Error + Send + Sync>> {
     // Resolve audio device fresh each attempt
-    let audio_device = match &args.audio_device {
-        Some(query) => Some(
-            shared::find_device(query)
-                .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { e.to_string().into() })?,
-        ),
-        None => None,
-    };
+    let audio_device =
+        match &args.audio_device {
+            Some(query) => Some(shared::find_device(query).map_err(
+                |e| -> Box<dyn std::error::Error + Send + Sync> { e.to_string().into() },
+            )?),
+            None => None,
+        };
 
     let hello = shared::build_hello(&args.name, "Sendspin Daemon");
     info!("Connecting to {}...", args.server);

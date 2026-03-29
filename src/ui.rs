@@ -1,8 +1,8 @@
+use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, LineGauge, Padding, Paragraph};
-use ratatui::Frame;
 
 use sendspin::protocol::messages::RepeatMode;
 use sendspin::sync::SyncQuality;
@@ -31,7 +31,9 @@ pub fn draw(frame: &mut Frame, state: &AppState) {
         .title_bottom(
             Line::from(Span::styled(
                 " q:quit  spc:play  n/p:skip  +/-:vol  m:mute  r:repeat  s:shuffle ",
-                Style::default().fg(Color::DarkGray).add_modifier(Modifier::DIM),
+                Style::default()
+                    .fg(Color::DarkGray)
+                    .add_modifier(Modifier::DIM),
             ))
             .centered(),
         )
@@ -59,14 +61,11 @@ pub fn draw(frame: &mut Frame, state: &AppState) {
 }
 
 fn draw_track_info(frame: &mut Frame, state: &AppState, title_area: Rect, artist_area: Rect) {
-    let title = state
-        .title
-        .as_deref()
-        .unwrap_or(if state.connected {
-            "Waiting for track..."
-        } else {
-            "Not connected"
-        });
+    let title = state.title.as_deref().unwrap_or(if state.connected {
+        "Waiting for track..."
+    } else {
+        "Not connected"
+    });
 
     let mut title_spans = vec![
         Span::styled(
@@ -96,10 +95,7 @@ fn draw_track_info(frame: &mut Frame, state: &AppState, title_area: Rect, artist
         (true, false) => format!("  {album_with_year}"),
         (false, false) => format!("  {artist} — {album_with_year}"),
     };
-    let artist_line = Line::from(Span::styled(
-        subtitle,
-        Style::default().fg(Color::DarkGray),
-    ));
+    let artist_line = Line::from(Span::styled(subtitle, Style::default().fg(Color::DarkGray)));
     frame.render_widget(Paragraph::new(artist_line), artist_area);
 }
 
@@ -151,7 +147,10 @@ fn draw_controls(frame: &mut Frame, state: &AppState, area: Rect) {
 
     let line = Line::from(vec![
         Span::styled("vol ", Style::default().fg(Color::DarkGray)),
-        Span::styled(vol_bar, Style::default().fg(if state.muted { Color::Red } else { Color::Cyan })),
+        Span::styled(
+            vol_bar,
+            Style::default().fg(if state.muted { Color::Red } else { Color::Cyan }),
+        ),
         Span::styled(
             format!(" {:>3}%", if state.muted { 0 } else { state.volume }),
             Style::default().fg(Color::DarkGray),
@@ -203,7 +202,10 @@ fn draw_status(frame: &mut Frame, state: &AppState, area: Rect) {
             SyncQuality::Lost => Color::Red,
         };
         spans.push(Span::styled(" │ ", Style::default().fg(Color::DarkGray)));
-        spans.push(Span::styled(format!("sync {rtt:.0}ms"), Style::default().fg(color)));
+        spans.push(Span::styled(
+            format!("sync {rtt:.0}ms"),
+            Style::default().fg(color),
+        ));
     }
 
     // Audio format + device
@@ -214,7 +216,10 @@ fn draw_status(frame: &mut Frame, state: &AppState, area: Rect) {
             sendspin::audio::Codec::Flac => "FLAC",
             sendspin::audio::Codec::Mp3 => "MP3",
         };
-        let mut info = format!("{codec} {}Hz/{}bit/{}ch", fmt.sample_rate, fmt.bit_depth, fmt.channels);
+        let mut info = format!(
+            "{codec} {}Hz/{}bit/{}ch",
+            fmt.sample_rate, fmt.bit_depth, fmt.channels
+        );
         if let Some(ref name) = state.device_name {
             info.push_str(&format!(" ({name})"));
         }
@@ -225,7 +230,10 @@ fn draw_status(frame: &mut Frame, state: &AppState, area: Rect) {
     // Group name
     if let Some(ref name) = state.group_name {
         spans.push(Span::styled(" │ ", Style::default().fg(Color::DarkGray)));
-        spans.push(Span::styled(name.as_str(), Style::default().fg(Color::DarkGray)));
+        spans.push(Span::styled(
+            name.as_str(),
+            Style::default().fg(Color::DarkGray),
+        ));
     }
 
     // Error

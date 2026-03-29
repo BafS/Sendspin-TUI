@@ -2,10 +2,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use log::{error, warn};
+use sendspin::ProtocolClient;
 use sendspin::audio::decode::{Decoder, PcmDecoder, PcmEndian};
 use sendspin::audio::{AudioBuffer, AudioFormat, Codec, SyncedPlayer};
 use sendspin::protocol::messages::{ClientCommand, ControllerCommand, GoodbyeReason, Message};
-use sendspin::ProtocolClient;
 use sendspin_tui::shared;
 use tokio::sync::mpsc;
 use tokio::time::interval;
@@ -84,9 +84,10 @@ async fn run_inner(
 
     let device_name = {
         use cpal::traits::{DeviceTrait, HostTrait};
-        let dev = audio_device.as_ref().cloned().or_else(|| {
-            cpal::default_host().default_output_device()
-        });
+        let dev = audio_device
+            .as_ref()
+            .cloned()
+            .or_else(|| cpal::default_host().default_output_device());
         dev.and_then(|d| d.description().ok().map(|desc| desc.name().to_string()))
     };
     let _ = event_tx.send(AppEvent::Connected { device_name });

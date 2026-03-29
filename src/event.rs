@@ -1,10 +1,12 @@
 use sendspin::audio::AudioFormat;
-use sendspin::protocol::messages::{MetadataState, ControllerState, PlaybackState, RepeatMode};
+use sendspin::protocol::messages::{ControllerState, MetadataState, PlaybackState, RepeatMode};
 use sendspin::sync::SyncQuality;
 
 /// Events sent from the protocol task to the TUI thread.
 pub enum AppEvent {
-    Connected { device_name: Option<String> },
+    Connected {
+        device_name: Option<String>,
+    },
     Disconnected(String),
     Metadata(MetadataState),
     Controller(ControllerState),
@@ -22,7 +24,10 @@ pub enum AppEvent {
     },
     StreamStarted(AudioFormat),
     StreamEnded,
-    ClockSync { rtt_ms: f64, quality: SyncQuality },
+    ClockSync {
+        rtt_ms: f64,
+        quality: SyncQuality,
+    },
     Error(String),
 }
 

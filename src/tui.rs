@@ -33,42 +33,42 @@ pub fn run(
         if event::poll(Duration::from_millis(50))?
             && let Event::Key(key) = event::read()?
         {
-                // Only handle key press events (not release/repeat)
-                if key.kind != KeyEventKind::Press {
-                    continue;
-                }
+            // Only handle key press events (not release/repeat)
+            if key.kind != KeyEventKind::Press {
+                continue;
+            }
 
-                match key.code {
-                    KeyCode::Char('q') | KeyCode::Esc => {
-                        let _ = command_tx.send(Command::Quit);
-                        state.should_quit = true;
-                    }
-                    KeyCode::Char(' ') => {
-                        let _ = command_tx.send(Command::PlayPause);
-                    }
-                    KeyCode::Char('n') | KeyCode::Right => {
-                        let _ = command_tx.send(Command::Next);
-                    }
-                    KeyCode::Char('p') | KeyCode::Left => {
-                        let _ = command_tx.send(Command::Previous);
-                    }
-                    KeyCode::Up | KeyCode::Char('+') | KeyCode::Char('=') => {
-                        let _ = command_tx.send(Command::VolumeUp);
-                    }
-                    KeyCode::Down | KeyCode::Char('-') => {
-                        let _ = command_tx.send(Command::VolumeDown);
-                    }
-                    KeyCode::Char('m') => {
-                        let _ = command_tx.send(Command::Mute);
-                    }
-                    KeyCode::Char('r') => {
-                        let _ = command_tx.send(Command::CycleRepeat);
-                    }
-                    KeyCode::Char('s') => {
-                        let _ = command_tx.send(Command::ToggleShuffle);
-                    }
-                    _ => {}
+            match key.code {
+                KeyCode::Char('q') | KeyCode::Esc => {
+                    let _ = command_tx.send(Command::Quit);
+                    state.should_quit = true;
                 }
+                KeyCode::Char(' ') => {
+                    let _ = command_tx.send(Command::PlayPause);
+                }
+                KeyCode::Char('n') | KeyCode::Right => {
+                    let _ = command_tx.send(Command::Next);
+                }
+                KeyCode::Char('p') | KeyCode::Left => {
+                    let _ = command_tx.send(Command::Previous);
+                }
+                KeyCode::Up | KeyCode::Char('+') | KeyCode::Char('=') => {
+                    let _ = command_tx.send(Command::VolumeUp);
+                }
+                KeyCode::Down | KeyCode::Char('-') => {
+                    let _ = command_tx.send(Command::VolumeDown);
+                }
+                KeyCode::Char('m') => {
+                    let _ = command_tx.send(Command::Mute);
+                }
+                KeyCode::Char('r') => {
+                    let _ = command_tx.send(Command::CycleRepeat);
+                }
+                KeyCode::Char('s') => {
+                    let _ = command_tx.send(Command::ToggleShuffle);
+                }
+                _ => {}
+            }
         }
     }
 
