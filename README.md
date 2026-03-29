@@ -1,8 +1,10 @@
 # Sendspin TUI (Rust)
 
-A terminal UI player and headless daemon for [Sendspin](https://github.com/Sendspin) written in Rust.
+An *experimental* terminal UI player and headless daemon for [Sendspin](https://github.com/Sendspin) written in Rust.
 
 Built with [sendspin-rs](https://github.com/Sendspin/sendspin-rs) for synchronized audio playback and [ratatui](https://ratatui.rs/) for the terminal interface.
+
+<img width="864" height="401" alt="image" src="https://github.com/user-attachments/assets/357cc6a8-83c3-4ea8-9f82-a80c63f2ac65" />
 
 ## Binaries
 
