@@ -145,7 +145,7 @@ pub fn list_devices() -> color_eyre::Result<()> {
                 .map_or_else(|_| "unknown".into(), |id| id.to_string());
             let desc = device
                 .description()
-                .map(|d| format!("{d:?}"))
+                .map(|d| d.name().to_string())
                 .unwrap_or_else(|_| "no description".into());
             println!("[{index:>2}] {id}\n     {desc}");
             index += 1;

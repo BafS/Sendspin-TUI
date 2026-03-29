@@ -82,7 +82,14 @@ async fn run_inner(
     let client = ProtocolClient::connect(server_url, hello).await?;
     let (mut message_rx, mut audio_rx, clock_sync, ws_tx, _guard) = client.split();
 
-    let _ = event_tx.send(AppEvent::Connected);
+    let device_name = {
+        use cpal::traits::{DeviceTrait, HostTrait};
+        let dev = audio_device.as_ref().cloned().or_else(|| {
+            cpal::default_host().default_output_device()
+        });
+        dev.and_then(|d| d.description().ok().map(|desc| desc.name().to_string()))
+    };
+    let _ = event_tx.send(AppEvent::Connected { device_name });
 
     shared::send_initial_client_state(&ws_tx).await?;
     shared::send_time_sync(&ws_tx).await?;

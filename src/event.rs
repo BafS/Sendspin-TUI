@@ -4,7 +4,7 @@ use sendspin::sync::SyncQuality;
 
 /// Events sent from the protocol task to the TUI thread.
 pub enum AppEvent {
-    Connected,
+    Connected { device_name: Option<String> },
     Disconnected(String),
     Metadata(MetadataState),
     Controller(ControllerState),

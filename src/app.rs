@@ -33,6 +33,7 @@ pub struct AppState {
 
     // Connection/sync
     pub connected: bool,
+    pub device_name: Option<String>,
     pub last_data_at: Option<Instant>,
     pub sync_rtt_ms: Option<f64>,
     pub sync_quality: Option<SyncQuality>,
@@ -59,6 +60,7 @@ impl AppState {
             playback_state: PlaybackState::Stopped,
             group_name: None,
             connected: false,
+            device_name: None,
             last_data_at: None,
             sync_rtt_ms: None,
             sync_quality: None,
@@ -110,8 +112,9 @@ impl AppState {
     /// Apply a protocol event to update the application state.
     pub fn handle_event(&mut self, event: AppEvent) {
         match event {
-            AppEvent::Connected => {
+            AppEvent::Connected { device_name } => {
                 self.connected = true;
+                self.device_name = device_name;
                 self.last_data_at = Some(Instant::now());
                 self.error = None;
             }
@@ -256,7 +259,7 @@ mod tests {
     fn connected_clears_error() {
         let mut state = AppState::new();
         state.error = Some("old error".into());
-        state.handle_event(AppEvent::Connected);
+        state.handle_event(AppEvent::Connected { device_name: None });
         assert!(state.connected);
         assert!(state.error.is_none());
     }

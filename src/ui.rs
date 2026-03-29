@@ -37,6 +37,7 @@ pub fn draw(frame: &mut Frame, state: &AppState) {
         Constraint::Length(1), // spacer
         Constraint::Length(1), // controls
         Constraint::Min(0),    // fill
+        Constraint::Length(1), // keybinds
         Constraint::Length(1), // status bar
     ])
     .split(inner);
@@ -44,7 +45,8 @@ pub fn draw(frame: &mut Frame, state: &AppState) {
     draw_track_info(frame, state, layout[0], layout[1]);
     draw_progress(frame, state, layout[3]);
     draw_controls(frame, state, layout[5]);
-    draw_status(frame, state, layout[7]);
+    draw_keybinds(frame, layout[7]);
+    draw_status(frame, state, layout[8]);
 }
 
 fn draw_track_info(frame: &mut Frame, state: &AppState, title_area: Rect, artist_area: Rect) {
@@ -183,13 +185,20 @@ fn draw_status(frame: &mut Frame, state: &AppState, area: Rect) {
         spans.push(Span::styled(format!("sync {rtt:.0}ms"), Style::default().fg(color)));
     }
 
-    // Audio format
+    // Audio format + device
     if let Some(ref fmt) = state.audio_format {
+        let codec = match fmt.codec {
+            sendspin::audio::Codec::Pcm => "PCM",
+            sendspin::audio::Codec::Opus => "Opus",
+            sendspin::audio::Codec::Flac => "FLAC",
+            sendspin::audio::Codec::Mp3 => "MP3",
+        };
+        let mut info = format!("{codec} {}Hz/{}bit/{}ch", fmt.sample_rate, fmt.bit_depth, fmt.channels);
+        if let Some(ref name) = state.device_name {
+            info.push_str(&format!(" ({name})"));
+        }
         spans.push(Span::styled(" │ ", Style::default().fg(Color::DarkGray)));
-        spans.push(Span::styled(
-            format!("{}Hz/{}bit/{}ch", fmt.sample_rate, fmt.bit_depth, fmt.channels),
-            Style::default().fg(Color::DarkGray),
-        ));
+        spans.push(Span::styled(info, Style::default().fg(Color::DarkGray)));
     }
 
     // Group name
@@ -204,14 +213,15 @@ fn draw_status(frame: &mut Frame, state: &AppState, area: Rect) {
         spans.push(Span::styled(err.as_str(), Style::default().fg(Color::Red)));
     }
 
-    // Keybinds hint (right-aligned would need more layout, keep it simple)
-    spans.push(Span::styled(" │ ", Style::default().fg(Color::DarkGray)));
-    spans.push(Span::styled(
-        "q:quit spc:play n/p:skip ±:vol m:mute r:repeat s:shuffle",
+    frame.render_widget(Paragraph::new(Line::from(spans)), area);
+}
+
+fn draw_keybinds(frame: &mut Frame, area: Rect) {
+    let line = Line::from(Span::styled(
+        "q:quit  spc:play  n/p:skip  +/-:vol  m:mute  r:repeat  s:shuffle",
         Style::default().fg(Color::DarkGray).add_modifier(Modifier::DIM),
     ));
-
-    frame.render_widget(Paragraph::new(Line::from(spans)), area);
+    frame.render_widget(Paragraph::new(line), area);
 }
 
 fn volume_bar(volume: u8, muted: bool) -> String {
