@@ -33,6 +33,7 @@ pub struct AppState {
 
     // Connection/sync
     pub connected: bool,
+    pub last_data_at: Option<Instant>,
     pub sync_rtt_ms: Option<f64>,
     pub sync_quality: Option<SyncQuality>,
     pub audio_format: Option<AudioFormat>,
@@ -58,6 +59,7 @@ impl AppState {
             playback_state: PlaybackState::Stopped,
             group_name: None,
             connected: false,
+            last_data_at: None,
             sync_rtt_ms: None,
             sync_quality: None,
             audio_format: None,
@@ -94,18 +96,32 @@ impl AppState {
         self.playback_speed > 0
     }
 
+    /// Whether we appear to have lost connection (no data for >10s while connected).
+    pub fn is_stale(&self) -> bool {
+        if !self.connected {
+            return false;
+        }
+        match self.last_data_at {
+            Some(t) => t.elapsed() > std::time::Duration::from_secs(10),
+            None => false,
+        }
+    }
+
     /// Apply a protocol event to update the application state.
     pub fn handle_event(&mut self, event: AppEvent) {
         match event {
             AppEvent::Connected => {
                 self.connected = true;
+                self.last_data_at = Some(Instant::now());
                 self.error = None;
             }
             AppEvent::Disconnected(reason) => {
                 self.connected = false;
+                self.last_data_at = None;
                 self.error = Some(reason);
             }
             AppEvent::Metadata(meta) => {
+                self.last_data_at = Some(Instant::now());
                 if meta.title.is_some() {
                     self.title = meta.title;
                 }
@@ -171,6 +187,7 @@ impl AppState {
                 self.progress_updated_at = Instant::now();
             }
             AppEvent::ClockSync { rtt_ms, quality } => {
+                self.last_data_at = Some(Instant::now());
                 self.sync_rtt_ms = Some(rtt_ms);
                 self.sync_quality = Some(quality);
             }

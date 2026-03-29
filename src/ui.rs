@@ -15,7 +15,9 @@ pub fn draw(frame: &mut Frame, state: &AppState) {
 
     let outer = Block::default()
         .borders(Borders::ALL)
-        .border_style(Style::default().fg(if state.connected {
+        .border_style(Style::default().fg(if state.is_stale() {
+            Color::Yellow
+        } else if state.connected {
             Color::Green
         } else {
             Color::DarkGray
@@ -159,7 +161,9 @@ fn draw_status(frame: &mut Frame, state: &AppState, area: Rect) {
     let mut spans = Vec::new();
 
     // Connection status
-    if state.connected {
+    if state.is_stale() {
+        spans.push(Span::styled("no data", Style::default().fg(Color::Yellow)));
+    } else if state.connected {
         spans.push(Span::styled("connected", Style::default().fg(Color::Green)));
     } else {
         spans.push(Span::styled(

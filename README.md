@@ -17,8 +17,9 @@ This crate provides two binaries:
 - Live track metadata (title, artist, album, progress)
 - Playback controls (play/pause, next/previous, volume, mute, repeat, shuffle)
 - Clock sync status monitoring
-- Auto-reconnect with exponential backoff
 - Graceful shutdown on SIGINT/SIGTERM
+- Auto-reconnect with exponential backoff
+- Stale connection detection
 
 ## Usage
 
