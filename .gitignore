@@ -3,3 +3,4 @@
 /*.md
 *.log
 !README.md
+!.github/
