@@ -1,5 +1,5 @@
 use ratatui::layout::{Constraint, Layout, Rect};
-use ratatui::style::{Color, Modifier, Style, Stylize};
+use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, LineGauge, Padding, Paragraph};
 use ratatui::Frame;
@@ -22,8 +22,19 @@ pub fn draw(frame: &mut Frame, state: &AppState) {
         } else {
             Color::DarkGray
         }))
-        .title(" sendspin ")
+        .title(if let Some(ref t) = state.title {
+            format!(" sendspin — {t} ")
+        } else {
+            " sendspin ".to_string()
+        })
         .title_style(Style::default().bold())
+        .title_bottom(
+            Line::from(Span::styled(
+                " q:quit  spc:play  n/p:skip  +/-:vol  m:mute  r:repeat  s:shuffle ",
+                Style::default().fg(Color::DarkGray).add_modifier(Modifier::DIM),
+            ))
+            .centered(),
+        )
         .padding(Padding::new(2, 2, 1, 0));
 
     let inner = outer.inner(area);
@@ -37,7 +48,6 @@ pub fn draw(frame: &mut Frame, state: &AppState) {
         Constraint::Length(1), // spacer
         Constraint::Length(1), // controls
         Constraint::Min(0),    // fill
-        Constraint::Length(1), // keybinds
         Constraint::Length(1), // status bar
     ])
     .split(inner);
@@ -45,8 +55,7 @@ pub fn draw(frame: &mut Frame, state: &AppState) {
     draw_track_info(frame, state, layout[0], layout[1]);
     draw_progress(frame, state, layout[3]);
     draw_controls(frame, state, layout[5]);
-    draw_keybinds(frame, layout[7]);
-    draw_status(frame, state, layout[8]);
+    draw_status(frame, state, layout[7]);
 }
 
 fn draw_track_info(frame: &mut Frame, state: &AppState, title_area: Rect, artist_area: Rect) {
@@ -59,22 +68,33 @@ fn draw_track_info(frame: &mut Frame, state: &AppState, title_area: Rect, artist
             "Not connected"
         });
 
-    let title_line = Line::from(vec![
+    let mut title_spans = vec![
         Span::styled(
             if state.is_playing() { "▶ " } else { "⏸ " },
             Style::default().fg(Color::Cyan),
         ),
         Span::styled(title, Style::default().bold().fg(Color::White)),
-    ]);
+    ];
+    if let Some(n) = state.track_number {
+        title_spans.push(Span::styled(
+            format!("  #{n}"),
+            Style::default().fg(Color::DarkGray),
+        ));
+    }
+    let title_line = Line::from(title_spans);
     frame.render_widget(Paragraph::new(title_line), title_area);
 
     let artist = state.artist.as_deref().unwrap_or("");
     let album = state.album.as_deref().unwrap_or("");
-    let subtitle = match (artist.is_empty(), album.is_empty()) {
+    let album_with_year = match (album.is_empty(), state.year) {
+        (false, Some(y)) => format!("{album} ({y})"),
+        _ => album.to_string(),
+    };
+    let subtitle = match (artist.is_empty(), album_with_year.is_empty()) {
         (true, true) => String::new(),
         (false, true) => format!("  {artist}"),
-        (true, false) => format!("  {album}"),
-        (false, false) => format!("  {artist} — {album}"),
+        (true, false) => format!("  {album_with_year}"),
+        (false, false) => format!("  {artist} — {album_with_year}"),
     };
     let artist_line = Line::from(Span::styled(
         subtitle,
@@ -107,7 +127,8 @@ fn draw_progress(frame: &mut Frame, state: &AppState, area: Rect) {
         .ratio(state.progress_ratio())
         .filled_style(Style::default().fg(Color::Cyan))
         .unfilled_style(Style::default().fg(Color::DarkGray))
-        .line_set(ratatui::symbols::line::THICK);
+        .filled_symbol(ratatui::symbols::line::THICK.horizontal)
+        .unfilled_symbol(ratatui::symbols::line::THICK.horizontal);
     frame.render_widget(gauge, chunks[1]);
 
     frame.render_widget(
@@ -214,14 +235,6 @@ fn draw_status(frame: &mut Frame, state: &AppState, area: Rect) {
     }
 
     frame.render_widget(Paragraph::new(Line::from(spans)), area);
-}
-
-fn draw_keybinds(frame: &mut Frame, area: Rect) {
-    let line = Line::from(Span::styled(
-        "q:quit  spc:play  n/p:skip  +/-:vol  m:mute  r:repeat  s:shuffle",
-        Style::default().fg(Color::DarkGray).add_modifier(Modifier::DIM),
-    ));
-    frame.render_widget(Paragraph::new(line), area);
 }
 
 fn volume_bar(volume: u8, muted: bool) -> String {

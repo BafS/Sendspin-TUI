@@ -17,8 +17,8 @@ path = "src/bin/daemon.rs"
 
 [dependencies]
 sendspin = "0.1.2"
-ratatui = "0.29"
-crossterm = "0.28"
+ratatui = "0.30"
+crossterm = "0.29"
 tokio = { version = "1", features = ["rt-multi-thread", "sync", "time", "macros", "signal"] }
 clap = { version = "4", features = ["derive"] }
 cpal = "0.17"

@@ -14,6 +14,8 @@ pub struct AppState {
     pub title: Option<String>,
     pub artist: Option<String>,
     pub album: Option<String>,
+    pub year: Option<u32>,
+    pub track_number: Option<u32>,
 
     // Progress
     pub track_progress_ms: i64,
@@ -49,6 +51,8 @@ impl AppState {
             title: None,
             artist: None,
             album: None,
+            year: None,
+            track_number: None,
             track_progress_ms: 0,
             track_duration_ms: 0,
             playback_speed: 0,
@@ -133,6 +137,12 @@ impl AppState {
                 }
                 if meta.album.is_some() {
                     self.album = meta.album;
+                }
+                if meta.year.is_some() {
+                    self.year = meta.year;
+                }
+                if meta.track.is_some() {
+                    self.track_number = meta.track;
                 }
                 if let Some(progress) = meta.progress {
                     self.track_progress_ms = progress.track_progress;
